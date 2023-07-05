@@ -1,0 +1,732 @@
+# information_system
+information and search system for monitoring repayment of bank loans
+<div class="container">
+  <div class="credits">
+    <p class="credits-title">Не погашені кредити</p>
+    <div class="table-container" *ngIf="credits.length">
+      <table
+        mat-table
+        [dataSource]="credits"
+        class="mat-elevation-z8 credits-table"
+      >
+        <ng-container matColumnDef="amount">
+          <th mat-header-cell *matHeaderCellDef>Обсяг запозичення</th>
+          <td mat-cell *matCellDef="let element">
+            {{ element.amount }}
+          </td>
+        </ng-container>
+
+        <ng-container matColumnDef="term">
+          <th mat-header-cell *matHeaderCellDef>Термін</th>
+          <td mat-cell *matCellDef="let element">{{ element.term }} міс.</td>
+        </ng-container>
+
+        <ng-container matColumnDef="percent">
+          <th mat-header-cell *matHeaderCellDef>Під відсоток</th>
+          <td mat-cell *matCellDef="let element">{{ element.percent }}%</td>
+        </ng-container>
+
+        <ng-container matColumnDef="client">
+          <th mat-header-cell *matHeaderCellDef>Позичальник</th>
+          <td mat-cell *matCellDef="let element">
+            {{ getClientFullname(element.client) }}
+          </td>
+        </ng-container>
+
+        <ng-container matColumnDef="startDate">
+          <th mat-header-cell *matHeaderCellDef>Дата початку кредитування</th>
+          <td mat-cell *matCellDef="let element">
+            {{ formatDate(element.startDate) }}
+          </td>
+        </ng-container>
+
+        <ng-container matColumnDef="nextPayDate">
+          <th mat-header-cell *matHeaderCellDef>
+            Дата сплати наступного внеску
+          </th>
+          <td mat-cell *matCellDef="let element">
+            {{ formatDate(element.nextPayDate) }}
+          </td>
+        </ng-container>
+
+        <ng-container matColumnDef="overdueCount">
+          <th mat-header-cell *matHeaderCellDef>Протермінованих внесків</th>
+          <td mat-cell *matCellDef="let element">
+            {{ element.overdue_count }}
+          </td>
+        </ng-container>
+
+        <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
+        <tr mat-row *matRowDef="let row; columns: displayedColumns"></tr>
+      </table>
+      <mat-paginator
+        [length]="creditCount"
+        [pageSize]="limit"
+        [pageSizeOptions]="[5, 10, 25, 100]"
+        aria-label="Виберіть сторінку"
+        (page)="onChangePage($event)"
+      >
+      </mat-paginator>
+    </div>
+  </div>
+</div>
+
+
+import { Component, OnInit } from '@angular/core';
+import { PageEvent } from '@angular/material/paginator';
+import { map, filter } from 'rxjs/operators';
+import { ApiService } from '../api.service';
+import { Client, CreditPopulated } from '../domain.type';
+
+@Component({
+  selector: 'app-main',
+  templateUrl: './main.component.html',
+  styleUrls: ['./main.component.scss'],
+})
+export class MainComponent implements OnInit {
+  credits: CreditPopulated[] = [];
+  page: number = 0;
+  limit: number = 5;
+  creditCount: number = 100;
+  displayedColumns: string[] = [
+    'amount',
+    'term',
+    'percent',
+    'client',
+    'startDate',
+    'nextPayDate',
+    'overdueCount',
+  ];
+
+  constructor(private apiService: ApiService) {}
+
+  ngOnInit(): void {
+    this.apiService
+      .getCreditWithDebtCount()
+      .pipe(
+        filter((response) => !!response.result),
+        map((response) => response.result as number)
+      )
+      .subscribe((count) => (this.creditCount = count));
+    this.apiService
+      .getCreditsWithDebt(this.page * this.limit, this.limit)
+      .pipe(
+        filter((response) => !!response.result),
+        map((response) => response.result as CreditPopulated[])
+      )
+      .subscribe((credits) => (this.credits = credits));
+  }
+
+  formatDate(dateStr: string) {
+    const date = new Date(dateStr);
+    return `${date.getDate() < 10 ? `0${date.getDate()}` : date.getDate()}.${
+      date.getMonth() + 1 < 10 ? `0${date.getMonth() + 1}` : date.getMonth() + 1
+    }.${date.getFullYear()}`;
+  }
+
+  getClientFullname(client: Client) {
+    return `${client.first_name} ${client.last_name}`;
+  }
+
+  onChangePage(event: PageEvent) {
+    this.page = event.pageIndex;
+    this.limit = event.pageSize;
+    this.apiService
+      .getCreditsWithDebt(this.page * this.limit, this.limit)
+      .pipe(
+        filter((response) => !!response.result),
+        map((response) => response.result as CreditPopulated[])
+      )
+      .subscribe((credits) => (this.credits = credits));
+  }
+}
+
+<div class="container">
+  <div class="selects-wrapper">
+    <mat-form-field class="form-select" appearance="fill">
+      <mat-label>Позичальник</mat-label>
+      <mat-select [(ngModel)]="selectedClient">
+        <mat-option *ngFor="let item of clients" [value]="item">
+          {{ getClientFullname(item) }}
+        </mat-option>
+      </mat-select>
+    </mat-form-field>
+  </div>
+  <div class="inputs-wrapper">
+    <mat-form-field class="form-filed">
+      <mat-label class="form-label">Обсяг, грн</mat-label>
+      <input matInput type="text" [(ngModel)]="amount" />
+    </mat-form-field>
+    <mat-form-field class="form-filed">
+      <mat-label class="form-label">Термін сплати, місяці</mat-label>
+      <input matInput type="text" [(ngModel)]="term" />
+    </mat-form-field>
+  </div>
+  <div class="inputs-wrapper">
+    <mat-form-field class="form-filed">
+      <mat-label class="form-label">Відсоток</mat-label>
+      <input matInput type="text" [(ngModel)]="percent" />
+    </mat-form-field>
+    <mat-form-field class="form-field">
+      <mat-label class="form-label">Дата початку кредитування</mat-label>
+      <input
+        matInput
+        [(ngModel)]="startDate"
+        [matDatepicker]="picker"
+        readonly
+      />
+      <mat-datepicker-toggle matSuffix [for]="picker"></mat-datepicker-toggle>
+      <mat-datepicker #picker></mat-datepicker>
+    </mat-form-field>
+  </div>
+  <button
+    class="complete-btn"
+    [disabled]="!isValid"
+    mat-raised-button
+    color="primary"
+    (click)="createCredit()"
+  >
+
+  </button>
+  <div class="credits">
+    <p class="credits-title">Кредити</p>
+    <div class="table-container" *ngIf="credits.length">
+      <table
+        mat-table
+        [dataSource]="credits"
+        class="mat-elevation-z8 credits-table"
+      >
+        <ng-container matColumnDef="amount">
+          <th mat-header-cell *matHeaderCellDef>Обсяг запозичення</th>
+          <td mat-cell *matCellDef="let element">
+            {{ element.amount }}
+          </td>
+        </ng-container>
+
+        <ng-container matColumnDef="term">
+          <th mat-header-cell *matHeaderCellDef>Термін</th>
+          <td mat-cell *matCellDef="let element">{{ element.term }} міс.</td>
+        </ng-container>
+
+        <ng-container matColumnDef="percent">
+          <th mat-header-cell *matHeaderCellDef>Під відсоток</th>
+          <td mat-cell *matCellDef="let element">{{ element.percent }}%</td>
+        </ng-container>
+
+        <ng-container matColumnDef="client">
+          <th mat-header-cell *matHeaderCellDef>Позичальник</th>
+          <td mat-cell *matCellDef="let element">
+            {{ getClientFullname(element.client) }}
+          </td>
+        </ng-container>
+
+        <ng-container matColumnDef="startDate">
+          <th mat-header-cell *matHeaderCellDef>Дата початку кредитування</th>
+          <td mat-cell *matCellDef="let element">
+            {{ formatDate(element.startDate) }}
+          </td>
+        </ng-container>
+
+        <ng-container matColumnDef="nextPayDate">
+          <th mat-header-cell *matHeaderCellDef>
+            Дата сплати наступного внеску
+          </th>
+          <td mat-cell *matCellDef="let element">
+            {{ formatDate(element.nextPayDate) }}
+          </td>
+        </ng-container>
+
+        <ng-container matColumnDef="paymentCount">
+          <th mat-header-cell *matHeaderCellDef>Сплачених внесків</th>
+          <td mat-cell *matCellDef="let element">
+            {{ element.payment_count }}
+          </td>
+        </ng-container>
+
+        <ng-container matColumnDef="overdueCount">
+          <th mat-header-cell *matHeaderCellDef>Протермінованих внесків</th>
+          <td mat-cell *matCellDef="let element">
+            {{ element.overdue_count }}
+          </td>
+        </ng-container>
+
+        <ng-container matColumnDef="pay">
+          <th mat-header-cell *matHeaderCellDef></th>
+          <td mat-cell *matCellDef="let element">
+            <button
+              mat-raised-button
+              color="primary"
+              (click)="openDialog(element)"
+            >
+              Сплатити
+            </button>
+          </td>
+        </ng-container>
+
+        <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
+        <tr mat-row *matRowDef="let row; columns: displayedColumns"></tr>
+      </table>
+      <mat-paginator
+        [length]="creditCount"
+        [pageSize]="limit"
+        [pageSizeOptions]="[5, 10, 25, 100]"
+        aria-label="Виберіть сторінку"
+        (page)="onChangePage($event)"
+      >
+      </mat-paginator>
+    </div>
+  </div>
+</div>
+
+
+import { Component, OnInit } from '@angular/core';
+import { MatDialog } from '@angular/material/dialog';
+import { PageEvent } from '@angular/material/paginator';
+import { map, filter } from 'rxjs/operators';
+import { ApiService } from '../api.service';
+import { DialogComponent } from '../dialog/dialog.component';
+import { Client, CreditPopulated } from '../domain.type';
+
+@Component({
+  selector: 'app-credits',
+  templateUrl: './credits.component.html',
+  styleUrls: ['./credits.component.scss'],
+})
+export class CreditsComponent implements OnInit {
+  term: number | null = null;
+  amount: number | null = null;
+  percent: number | null = null;
+  startDate: string = '';
+  selectedClient: Client | null = null;
+  clients: Client[] = [];
+
+  credits: CreditPopulated[] = [];
+  page: number = 0;
+  limit: number = 5;
+  creditCount: number = 100;
+  displayedColumns: string[] = [
+    'amount',
+    'term',
+    'percent',
+    'client',
+    'startDate',
+    'nextPayDate',
+    'paymentCount',
+    'overdueCount',
+    'pay',
+  ];
+
+  constructor(private apiService: ApiService, public dialog: MatDialog) {}
+
+  get isValid() {
+    return !!(
+      this.term &&
+      this.amount &&
+      this.startDate &&
+      this.percent &&
+      this.selectedClient
+    );
+  }
+
+  loadCredits() {
+    this.apiService
+      .getCreditCount()
+      .pipe(
+        filter((response) => !!response.result),
+        map((response) => response.result as number)
+      )
+      .subscribe((count) => (this.creditCount = count));
+    this.apiService
+      .getCredits(this.page * this.limit, this.limit)
+      .pipe(
+        filter((response) => !!response.result),
+        map((response) => response.result as CreditPopulated[])
+      )
+      .subscribe((credits) => (this.credits = credits));
+  }
+
+  ngOnInit(): void {
+    this.apiService
+      .getClients()
+      .pipe(map((response) => response.result))
+      .subscribe((clients) => (this.clients = clients as Client[]));
+    this.loadCredits();
+  }
+
+  formatDate(dateStr: string) {
+    const date = new Date(dateStr);
+    return `${date.getDate() < 10 ? `0${date.getDate()}` : date.getDate()}.${
+      date.getMonth() + 1 < 10 ? `0${date.getMonth() + 1}` : date.getMonth() + 1
+    }.${date.getFullYear()}`;
+  }
+
+  getClientFullname(client: Client) {
+    return `${client.first_name} ${client.last_name}`;
+  }
+
+  createCredit() {
+    if (!this.isValid) {
+      return;
+    }
+    this.apiService
+      .createCredit({
+        term: this.term as number,
+        amount: this.amount as number,
+        percent: this.percent as number,
+        startDate: this.startDate,
+        client: this.selectedClient!._id as string,
+      })
+      .subscribe(() => {
+        this.term = null;
+        this.amount = null;
+        this.startDate = '';
+        this.percent = null;
+        this.selectedClient = null;
+        this.page = 0;
+        this.loadCredits();
+      });
+  }
+
+  onChangePage(event: PageEvent) {
+    this.page = event.pageIndex;
+    this.limit = event.pageSize;
+    this.apiService
+      .getCredits(this.page * this.limit, this.limit)
+      .pipe(
+        filter((response) => !!response.result),
+        map((response) => response.result as CreditPopulated[])
+      )
+      .subscribe((credits) => (this.credits = credits));
+  }
+
+  openDialog(credit: CreditPopulated) {
+    this.dialog.open(DialogComponent, {
+      data: credit,
+    });
+  }
+}
+
+
+<div class="container">
+  <div class="clients">
+    <p class="clients-title">Позичальники</p>
+    <div class="table-container" *ngIf="clients.length">
+      <table
+        mat-table
+        [dataSource]="clients"
+        class="mat-elevation-z8 clients-table"
+      >
+        <ng-container matColumnDef="id">
+          <th mat-header-cell *matHeaderCellDef>ID</th>
+          <td mat-cell *matCellDef="let element">
+            {{ element._id }}
+          </td>
+        </ng-container>
+
+        <ng-container matColumnDef="firstName">
+          <th mat-header-cell *matHeaderCellDef>Ім'я</th>
+          <td mat-cell *matCellDef="let element">
+            {{ element.first_name }}
+          </td>
+        </ng-container>
+
+        <ng-container matColumnDef="lastName">
+          <th mat-header-cell *matHeaderCellDef>Прізвище</th>
+          <td mat-cell *matCellDef="let element">
+            {{ element.last_name }}
+          </td>
+        </ng-container>
+
+        <ng-container matColumnDef="telephone">
+          <th mat-header-cell *matHeaderCellDef>Телефон</th>
+          <td mat-cell *matCellDef="let element">
+            {{ element.telephone }}
+          </td>
+        </ng-container>
+
+        <ng-container matColumnDef="passport">
+          <th mat-header-cell *matHeaderCellDef>Паспорт</th>
+          <td mat-cell *matCellDef="let element">
+            {{ element.passport }}
+          </td>
+        </ng-container>
+
+        <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
+        <tr mat-row *matRowDef="let row; columns: displayedColumns"></tr>
+      </table>
+      <mat-paginator
+        class="paginator"
+        [length]="clientCount"
+        [pageSize]="limit"
+        [pageSizeOptions]="[5, 10, 25, 100]"
+        aria-label="Виберіть сторінку"
+        (page)="onChangePage($event)"
+      >
+      </mat-paginator>
+    </div>
+  </div>
+</div>
+
+
+import { Component, OnInit, ViewChild } from '@angular/core';
+import { map, filter } from 'rxjs/operators';
+import { MatTable } from '@angular/material/table';
+import { ApiService } from '../api.service';
+import { PageEvent } from '@angular/material/paginator';
+import { Client } from '../domain.type';
+
+@Component({
+  selector: 'app-borrowers',
+  templateUrl: './borrowers.component.html',
+  styleUrls: ['./borrowers.component.scss'],
+})
+export class BorrowersComponent implements OnInit {
+  clients: Client[] = [];
+  page: number = 0;
+  limit: number = 5;
+  clientCount: number = 100;
+  displayedColumns: string[] = [
+    'id',
+    'firstName',
+    'lastName',
+    'telephone',
+    'passport',
+  ];
+  @ViewChild(MatTable, { static: false }) table!: MatTable<Client>;
+  constructor(private apiService: ApiService) {}
+
+  ngOnInit(): void {
+    this.apiService
+      .getClientCount()
+      .pipe(
+        filter((response) => !!response.result),
+        map((response) => response.result as number)
+      )
+      .subscribe((count) => (this.clientCount = count));
+    this.apiService
+      .getClients(this.page * this.limit, this.limit)
+      .pipe(
+        filter((response) => !!response.result),
+        map((response) => response.result as Client[])
+      )
+      .subscribe((clients) => (this.clients = clients));
+  }
+
+  onChangePage(event: PageEvent) {
+    this.apiService
+      .getClients(event.pageIndex * event.pageSize, event.pageSize)
+      .pipe(
+        filter((response) => !!response.result),
+        map((response) => response.result as Client[])
+      )
+      .subscribe((clients) => (this.clients = clients));
+  }
+}
+
+
+import { HttpClient } from '@angular/common/http';
+import { Injectable } from '@angular/core';
+import { Client, Credit, CreditPopulated } from './domain.type';
+
+type ApiResponse<T> = {
+  result?: T;
+  error?: {
+    message: string;
+  };
+};
+
+@Injectable({
+  providedIn: 'root',
+})
+export class ApiService {
+  private url = 'http://127.0.0.1:3001/api';
+
+  constructor(private http: HttpClient) {}
+
+  private callApi<T>(method: string, params: object = {}) {
+    return this.http.post<ApiResponse<T>>(this.url, { method, params });
+  }
+
+  getCredits(offset = 0, limit = 10) {
+    return this.callApi<CreditPopulated[]>('credit.find', { offset, limit });
+  }
+
+  getCreditsWithDebt(offset = 0, limit = 10) {
+    return this.callApi<CreditPopulated[]>('credit.findWithDebt', {
+      offset,
+      limit,
+    });
+  }
+
+  getClients(offset?: number, limit?: number) {
+    return this.callApi<Client[]>('client.find', { offset, limit });
+  }
+
+  createCredit(credit: Credit) {
+    return this.callApi<Credit>('credit.create', { credit });
+  }
+
+  updateCredit(id: string, update: object) {
+    return this.callApi<Credit>('credit.update', { id, update });
+  }
+
+  pay(id: string, amount: number) {
+    return this.callApi<Credit>('credit.pay', { id, amount });
+  }
+
+  getCreditCount() {
+    return this.callApi<number>('credit.count', {});
+  }
+
+  getCreditWithDebtCount() {
+    return this.callApi<number>('credit.countWithDebt', {});
+  }
+
+  getClientCount() {
+    return this.callApi<number>('client.count', {});
+  }
+}
+
+
+const ClientRepository = require('../repositories/client')
+
+const clientRepository = new ClientRepository()
+
+module.exports = {
+  'client.find': async ({ offset, limit }) => {
+    const result = await clientRepository.find(offset, limit)
+    return { result }
+  },
+
+  'client.count': async () => {
+    const result = await clientRepository.count()
+    return { result }
+  },
+}
+
+
+const CreditRepository = require('../repositories/credit')
+const ClientRepository = require('../repositories/client')
+
+const creditRepository = new CreditRepository()
+const clientRepository = new ClientRepository()
+
+module.exports = {
+  'credit.create': async ({ credit }) => {
+    const date = new Date(credit.startDate)
+    date.setDate(date.getDate() + 30)
+    const result = await creditRepository.create({ ...credit, nextPayDate: date })
+    return { result }
+  },
+
+  'credit.find': async ({ offset, limit }) => {
+    const credits = await creditRepository.find(offset, limit)
+    const clients = await clientRepository.getByIds(credits.map(({ client }) => client))
+
+    return {
+      result: credits.map((el) => ({
+        ...el.toJSON(),
+        client: clients.find(({ _id }) => _id.toString() === el.client.toString()).toJSON(),
+      })),
+    }
+  },
+
+  'credit.findWithDebt': async ({ offset, limit }) => {
+    const credits = await creditRepository.findWithDebt(offset, limit)
+    const clients = await clientRepository.getByIds(credits.map(({ client }) => client))
+
+    return {
+      result: credits.map((el) => ({
+        ...el.toJSON(),
+        client: clients.find(({ _id }) => _id.toString() === el.client.toString()).toJSON(),
+      })),
+    }
+  },
+
+  'credit.pay': ({ id, amount }) => {
+    return creditRepository.pay(id, amount)
+  },
+
+  'credit.update': ({ id, update }) => {
+    return creditRepository.update(id, update)
+  },
+
+  'credit.count': async () => {
+    const result = await creditRepository.count()
+    return { result }
+  },
+
+  'credit.countWithDebt': async () => {
+    const result = await creditRepository.countWithDebt()
+    return { result }
+  },
+}
+
+
+const ClientModel = require('../models/client')
+
+class ClientRepository {
+  find(offset, limit, project = {}) {
+    return ClientModel.find({}, project, { skip: offset, limit, sort: { created_at: -1 } })
+  }
+
+  count() {
+    return ClientModel.countDocuments()
+  }
+
+  getByIds(ids) {
+    return ClientModel.find({ _id: { $in: ids } })
+  }
+}
+
+module.exports = ClientRepository
+
+
+const CreditModel = require('../models/credit')
+
+class CreditRepository {
+  find(offset, limit, project = {}) {
+    return CreditModel.find({}, project, { skip: offset, limit, sort: { created_at: -1 } })
+  }
+
+  async findWithDebt(offset, limit, project = {}) {
+    return CreditModel.find({ overdue_count: { $gt: 0 } }, project, {
+      skip: offset,
+      limit,
+      sort: { overdue_count: -1 },
+    })
+  }
+
+  pay(id, amount) {
+    return CreditModel.updateOne({ _id: id }, [
+      {
+        $set: {
+          payment_count: { $sum: ['$payment_count', 1] },
+          payments_amount: { $sum: ['$payments_amount', +amount] },
+          overdue_count: {
+            $sum: ['$overdue_count', { $cond: [{ $gt: ['$overdue_count', 0] }, -1, 0] }],
+          },
+        },
+      },
+    ])
+  }
+
+  create(credit) {
+    return CreditModel.create({ ...credit })
+  }
+
+  update(id, update) {
+    return CreditModel.updateOne({ _id: id }, { $set: update })
+  }
+
+  count() {
+    return CreditModel.countDocuments()
+  }
+
+  async countWithDebt() {
+    const credits = await CreditModel.find({ overdue_count: { $gt: 0 } }, { _id: 1 })
+    return credits.length
+  }
+}
+
+module.exports = CreditRepository
